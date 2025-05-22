@@ -40,6 +40,10 @@
  * See http://www.freertos.org/a00110.html
  *----------------------------------------------------------*/
 
+#define vPortSVCHandler isr_svcall
+#define xPortPendSVHandler isr_pendsv
+#define xPortSysTickHandler isr_systick
+
 /* Scheduler Related */
 #define configUSE_PREEMPTION 1
 #define configUSE_TICKLESS_IDLE 0

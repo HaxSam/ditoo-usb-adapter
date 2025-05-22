@@ -18,11 +18,6 @@ endif()
 set(FREERTOS_KERNEL_PATH ${CMAKE_SOURCE_DIR}/lib/FreeRTOS-Kernel)
 set(PICO_SDK_PATH ${CMAKE_SOURCE_DIR}/lib/pico-sdk)
 
-include(btstack_import.cmake)
-include(lwip_import.cmake) # lwip config files
-SET(FREERTOS_CONFIG_FILE_DIRECTORY "${CMAKE_CURRENT_LIST_DIR}/configs/FreeRTOS-Kernel" CACHE STRING "Local Config")
-include_directories("${FREERTOS_CONFIG_FILE_DIRECTORY}") # FreeRTOS config files
-
 set(CMAKE_BUILD_TYPE Debug)
 set(PICO_PLATFORM "rp2040")
 set(PICO_BOARD pico_w)
@@ -30,38 +25,35 @@ set(PICO_BOARD pico_w)
 include(pico_sdk_import.cmake)
 pico_sdk_init()
 
+include(btstack_import.cmake)
+include(lwip_import.cmake)
 include(FreeRTOS_Kernel_import.cmake)
 
 project(ditoo-usb-adapter C CXX ASM)
-set(NAME PICO_FREERTOS)
+
+file(GLOB FILES src/*.c src/*.h)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-file(GLOB FILES src/*.c)
+add_subdirectory(src/usb-dev)
+add_subdirectory(src/bt-ditoo-stack)
 
-add_executable(${PROJECT_NAME} src/main.c)
+add_executable(${PROJECT_NAME} ${FILES})
 target_link_libraries(${PROJECT_NAME}
-	pico_async_context_freertos
     FreeRTOS-Kernel-Heap4
 	pico_stdlib
-	pico_btstack_ble
-    pico_btstack_cyw43
 	pico_cyw43_arch_none
-	hardware_resets
-	hardware_irq
-	BTSTACK_PORT
-	LWIP_PORT
+	usb-dev
+	bt-ditoo-stack
 	FREERTOS_PORT
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE
-	src/include
 	${CMAKE_CURRENT_LIST_DIR}
 )
-
 
 pico_add_extra_outputs(${PROJECT_NAME})
 pico_enable_stdio_usb(${PROJECT_NAME} 0)
