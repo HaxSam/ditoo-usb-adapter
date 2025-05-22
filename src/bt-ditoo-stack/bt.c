@@ -67,7 +67,7 @@ void bt_client_task(__unused void* param) {
 static void client_start(void) {
     printf("Start scanning!\n");
     state = TC_W4_SCAN_RESULT;
-    gap_set_scan_parameters(0, 0x0030, 0x0030);
+    gap_set_scan_parameters(1, 0x0030, 0x0030);
     gap_start_scan();
 }
 
@@ -75,10 +75,16 @@ static void client_start(void) {
 // Bluetooth handler
 //--------------------------------------------------------------------+
 
-static bool advertisement_report_contains_service(uint16_t service, uint8_t* advertisement_report) {
+static bool advertisement_report_contains_device_name(char* search_name, uint8_t* advertisement_report) {
     // get advertisement from report event
     const uint8_t* adv_data = gap_event_advertising_report_get_data(advertisement_report);
     uint8_t adv_len = gap_event_advertising_report_get_data_length(advertisement_report);
+
+    bd_addr_t address;
+    gap_event_advertising_report_get_address(advertisement_report, address);
+
+    char device_name[31];
+    device_name[0] = '\0';
 
     // iterate over advertisement data
     ad_context_t context;
@@ -86,17 +92,20 @@ static bool advertisement_report_contains_service(uint16_t service, uint8_t* adv
         uint8_t data_type = ad_iterator_get_data_type(&context);
         uint8_t data_size = ad_iterator_get_data_len(&context);
         const uint8_t* data = ad_iterator_get_data(&context);
+
         switch (data_type) {
-            case BLUETOOTH_DATA_TYPE_COMPLETE_LIST_OF_16_BIT_SERVICE_CLASS_UUIDS:
-                for (int i = 0; i < data_size; i += 2) {
-                    uint16_t type = little_endian_read_16(data, i);
-                    if (type == service) return true;
-                }
+            case BLUETOOTH_DATA_TYPE_COMPLETE_LOCAL_NAME:
+            case BLUETOOTH_DATA_TYPE_SHORTENED_LOCAL_NAME:
+                memcpy(device_name, data, MIN(data_size, sizeof(device_name) - 1));
+                device_name[MIN(data_size, sizeof(device_name) - 1)] = '\0';
+                break;
+
             default:
                 break;
         }
     }
-    return false;
+
+    return strncmp(device_name, search_name, strlen(search_name)) == 0;
 }
 
 static void handle_gatt_client_event(__unused uint8_t packet_type, __unused uint16_t channel, __unused uint8_t* packet, uint16_t size) {
@@ -205,7 +214,7 @@ static void hci_event_handler(uint8_t packet_type, __unused uint16_t channel, __
         case GAP_EVENT_ADVERTISING_REPORT:
             if (state != TC_W4_SCAN_RESULT) return;
             // check name in advertisement
-            if (!advertisement_report_contains_service(ORG_BLUETOOTH_SERVICE_ENVIRONMENTAL_SENSING, packet)) return;
+            if (!advertisement_report_contains_device_name("DitooPro", packet)) return;
             // store address and type
             gap_event_advertising_report_get_address(packet, server_addr);
             server_addr_type = gap_event_advertising_report_get_address_type(packet);
@@ -225,7 +234,7 @@ static void hci_event_handler(uint8_t packet_type, __unused uint16_t channel, __
                     // query primary services
                     printf("Search for env sensing service.\n");
                     state = TC_W4_SERVICE_RESULT;
-                    gatt_client_discover_primary_services_by_uuid16(handle_gatt_client_event, connection_handle, ORG_BLUETOOTH_SERVICE_ENVIRONMENTAL_SENSING);
+                    gatt_client_discover_primary_services_by_uuid16(handle_gatt_client_event, connection_handle, ORG_BLUETOOTH_SERVICE_GENERIC_ACCESS);
                     break;
                 default:
                     break;
