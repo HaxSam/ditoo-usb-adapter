@@ -9,6 +9,7 @@ target_link_libraries(${PROJECT_NAME}
 	FreeRTOS-Kernel-Heap4
 	pico_stdlib
 	pico_btstack_ble
+	pico_btstack_classic
     pico_btstack_cyw43
 	pico_cyw43_arch_none
 	BTSTACK_PORT
@@ -16,6 +17,7 @@ target_link_libraries(${PROJECT_NAME}
 )
 
 target_compile_definitions(${PROJECT_NAME} PUBLIC
+	ENABLE_CLASSIC=1
 	RUNNING_AS_CLIENT=1
 	CYW43_ENABLE_BLUETOOTH=1
 )
