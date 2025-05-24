@@ -1,32 +1,26 @@
 #include "bt.h"
 
-#include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 // bluetooth stack
 #include "btstack.h"
 #include "btstack_run_loop.h"
-#include "hci_cmd.h"
 
 // Pico
 #include "pico/cyw43_arch.h"
 #include "pico/stdlib.h"
 
+#define HEARTBEAT_PERIOD_MS 1000
+
 typedef enum {
     IDLE,
     W4_SCAN_RESULTS,
     W4_SCAN_COMPLETE,
-    W4_CONNECT,
-    W4_SDP_RESULT,
-    W2_SEND_SDP_QUERY,
     W4_RFCOMM_CHANNEL,
-    SENDING,
-    DONE
 } state_t;
 
-static bd_addr_t server_addr = {0xB1, 0x21, 0x81, 0x64, 0xE2, 0x9E};
+static bd_addr_t server_addr;
 static bd_addr_type_t server_addr_type;
 static hci_con_handle_t connection_handle;
 static uint8_t rfcomm_server_channel;
@@ -146,12 +140,12 @@ static void hci_packet_handler(uint8_t *packet, uint16_t size) {
             printf("RFCOMM channel open succeeded. New RFCOMM Channel ID 0x%02x, max frame size %u\n", rfcomm_cid, rfcomm_mtu);
 
             btstack_run_loop_set_timer_handler(&heartbeat, heart_beat_handler);
-            btstack_run_loop_set_timer(&heartbeat, 1000);
+            btstack_run_loop_set_timer(&heartbeat, HEARTBEAT_PERIOD_MS);
             btstack_run_loop_add_timer(&heartbeat);
             break;
 
         case RFCOMM_EVENT_CAN_SEND_NOW:
-            rfcomm_send(rfcomm_cid, data, 8);
+            // rfcomm_send(rfcomm_cid, data, 8);
             break;
 
         case RFCOMM_EVENT_CHANNEL_CLOSED:
@@ -206,7 +200,7 @@ static void heart_beat_handler(btstack_timer_source_t *ts) {
     if (rfcomm_cid) {
         rfcomm_request_can_send_now_event(rfcomm_cid);
     }
-    btstack_run_loop_set_timer(ts, 1000);
+    btstack_run_loop_set_timer(ts, HEARTBEAT_PERIOD_MS);
     btstack_run_loop_add_timer(ts);
 }
 
