@@ -4,6 +4,9 @@
 
 #include "usb_descriptors.h"
 
+// mpack
+#include "mpack/mpack.h"
+
 // tinyusb
 #include "bsp/board_api.h"
 #include "include/tusb_config.h"
@@ -81,18 +84,42 @@ void tud_resume_cb(void) {}
 // USB CDC
 //--------------------------------------------------------------------+
 
+static size_t read_cdc(mpack_tree_t* tree, char* buf, size_t count) {
+    if (!tud_cdc_available()) return 0;
+
+    uint32_t step = tud_cdc_read(buf, count);
+
+    tud_cdc_write(buf, step);
+    // printf("%.*s\n", step, buf);
+
+    tud_cdc_write_flush();
+
+    return step;
+}
+
+#define MAX_NODES 1024
+#define MAX_SIZE (MAX_NODES * 1024)
+
 void cdc_task(__unused void* param) {
+    mpack_tree_t tree;
+    mpack_tree_init_stream(&tree, read_cdc, NULL, MAX_SIZE, MAX_NODES);
+
     while (true) {
-        while (tud_cdc_available()) {
-            uint8_t buf[64];
-
-            uint32_t count = tud_cdc_read(buf, sizeof(buf));
-
-            tud_cdc_write(buf, count);
-            printf("%s\n", buf);
+        if (!mpack_tree_try_parse(&tree)) {
+            if (mpack_tree_error(&tree) != mpack_ok) break;
+            continue;
         }
 
-        tud_cdc_write_flush();
+        if (mpack_tree_error(&tree) != mpack_ok)
+            break;
+
+        mpack_node_t node = mpack_tree_root(&tree);
+
+        int8_t exttype = mpack_node_exttype(node);
+        uint32_t len = mpack_node_data_len(node);
+        const char* data = mpack_node_data(node);
+
+        printf("%.*s\n", len, data);
     }
 }
 

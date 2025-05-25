@@ -17,6 +17,7 @@ endif()
 
 set(FREERTOS_KERNEL_PATH ${CMAKE_SOURCE_DIR}/lib/FreeRTOS-Kernel)
 set(PICO_SDK_PATH ${CMAKE_SOURCE_DIR}/lib/pico-sdk)
+set(MPACK_PATH ${CMAKE_SOURCE_DIR}/lib/mpack)
 
 set(CMAKE_BUILD_TYPE Debug)
 set(PICO_PLATFORM "rp2040")
@@ -28,6 +29,7 @@ pico_sdk_init()
 include(btstack_import.cmake)
 include(lwip_import.cmake)
 include(FreeRTOS_Kernel_import.cmake)
+include(mpack.cmake)
 
 project(ditoo-usb-adapter C CXX ASM)
 

@@ -12,6 +12,7 @@ target_link_libraries(${PROJECT_NAME}
  	pico_unique_id
 	tinyusb_device
 	tinyusb_board
+	mpack
 	FREERTOS_PORT
 )
 
