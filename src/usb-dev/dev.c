@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 
+#include "cmd.h"
 #include "usb_descriptors.h"
 
 // mpack
@@ -97,7 +98,7 @@ static size_t read_cdc(mpack_tree_t* tree, char* buf, size_t count) {
     return step;
 }
 
-#define MAX_NODES 1024
+#define MAX_NODES 32
 #define MAX_SIZE (MAX_NODES * 1024)
 
 void cdc_task(__unused void* param) {
@@ -115,11 +116,31 @@ void cdc_task(__unused void* param) {
 
         mpack_node_t node = mpack_tree_root(&tree);
 
-        int8_t exttype = mpack_node_exttype(node);
+        bt_command_t bt_cmd;
+        command_type exttype = mpack_node_exttype(node);
+
         uint32_t len = mpack_node_data_len(node);
         const char* data = mpack_node_data(node);
 
-        printf("%.*s\n", len, data);
+        switch (exttype) {
+            case CMD_BT_SEND_DATA:
+                bt_cmd.type = exttype;
+                memcpy(bt_cmd.data, data, len);
+                bt_cmd.length = len;
+                break;
+
+            default:
+                break;
+        }
+
+        xQueueSend(bt_command_queue, &bt_cmd, 1000);
+
+        mpack_tree_destroy(&tree);
+        mpack_tree_init_stream(&tree, read_cdc, NULL, MAX_SIZE, MAX_NODES);
+
+        for (int i = 0; i < len; ++i)
+            printf("%02x ", data[i]);
+        printf("\n");
     }
 }
 

@@ -13,6 +13,7 @@ target_link_libraries(${PROJECT_NAME}
 	tinyusb_device
 	tinyusb_board
 	mpack
+	commands
 	FREERTOS_PORT
 )
 

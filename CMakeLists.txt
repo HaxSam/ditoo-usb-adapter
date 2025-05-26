@@ -23,13 +23,13 @@ set(CMAKE_BUILD_TYPE Debug)
 set(PICO_PLATFORM "rp2040")
 set(PICO_BOARD pico_w)
 
-include(pico_sdk_import.cmake)
+include(cmake/pico_sdk_import.cmake)
 pico_sdk_init()
 
-include(btstack_import.cmake)
-include(lwip_import.cmake)
-include(FreeRTOS_Kernel_import.cmake)
-include(mpack.cmake)
+include(cmake/btstack_import.cmake)
+include(cmake/lwip_import.cmake)
+include(cmake/FreeRTOS_Kernel_import.cmake)
+include(cmake/mpack.cmake)
 
 project(ditoo-usb-adapter C CXX ASM)
 
@@ -42,14 +42,16 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_subdirectory(src/usb-dev)
 add_subdirectory(src/bt-ditoo-stack)
+add_subdirectory(src/commands)
 
 add_executable(${PROJECT_NAME} ${FILES})
-target_link_libraries(${PROJECT_NAME}
+target_link_libraries(${PROJECT_NAME} PUBLIC
     FreeRTOS-Kernel-Heap4
 	pico_stdlib
 	pico_cyw43_arch_none
 	usb-dev
 	bt-ditoo-stack
+	commands
 	FREERTOS_PORT
 )
 

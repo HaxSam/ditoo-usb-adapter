@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "cmd.h"
+
 // bluetooth stack
 #include "btstack.h"
 #include "btstack_run_loop.h"
@@ -18,6 +20,8 @@ typedef enum {
     W4_SCAN_RESULTS,
     W4_SCAN_COMPLETE,
     W4_RFCOMM_CHANNEL,
+    WAIT_CMD,
+    SEND
 } state_t;
 
 static bd_addr_t server_addr;
@@ -26,6 +30,7 @@ static hci_con_handle_t connection_handle;
 static uint8_t rfcomm_server_channel;
 
 uint8_t data[] = {0x01, 0x04, 0x00, 0x74, 0x10, 0x88, 0x00, 0x02};
+static bt_command_t bt_cmd;
 
 static state_t state = IDLE;
 static uint16_t rfcomm_cid = 0;
@@ -63,6 +68,10 @@ void bt_client_task(void *param) {
 
     // SDP init
     gap_ssp_set_io_capability(SSP_IO_CAPABILITY_DISPLAY_YES_NO);
+
+    btstack_run_loop_set_timer_handler(&heartbeat, heart_beat_handler);
+    btstack_run_loop_set_timer(&heartbeat, HEARTBEAT_PERIOD_MS);
+    btstack_run_loop_add_timer(&heartbeat);
 
     hci_power_control(HCI_POWER_ON);
 
@@ -138,14 +147,12 @@ static void hci_packet_handler(uint8_t *packet, uint16_t size) {
             rfcomm_cid = rfcomm_event_channel_opened_get_rfcomm_cid(packet);
             rfcomm_mtu = rfcomm_event_channel_opened_get_max_frame_size(packet);
             printf("RFCOMM channel open succeeded. New RFCOMM Channel ID 0x%02x, max frame size %u\n", rfcomm_cid, rfcomm_mtu);
-
-            btstack_run_loop_set_timer_handler(&heartbeat, heart_beat_handler);
-            btstack_run_loop_set_timer(&heartbeat, HEARTBEAT_PERIOD_MS);
-            btstack_run_loop_add_timer(&heartbeat);
+            state = WAIT_CMD;
             break;
 
         case RFCOMM_EVENT_CAN_SEND_NOW:
-            // rfcomm_send(rfcomm_cid, data, 8);
+            rfcomm_send(rfcomm_cid, bt_cmd.data, bt_cmd.length);
+            state = WAIT_CMD;
             break;
 
         case RFCOMM_EVENT_CHANNEL_CLOSED:
@@ -197,9 +204,17 @@ static void rfcomm_packet_handler(uint8_t *packet, uint16_t size) {
 }
 
 static void heart_beat_handler(btstack_timer_source_t *ts) {
-    if (rfcomm_cid) {
+    if (state == WAIT_CMD && xQueueReceive(bt_command_queue, &bt_cmd, 0) != errQUEUE_EMPTY)
+        state = SEND;
+
+    if (rfcomm_cid && state == SEND) {
+        printf("CMD recived\n");
+        for (int i = 0; i < bt_cmd.length; ++i)
+            printf("%02x ", bt_cmd.data[i]);
+        printf("\n");
         rfcomm_request_can_send_now_event(rfcomm_cid);
     }
+
     btstack_run_loop_set_timer(ts, HEARTBEAT_PERIOD_MS);
     btstack_run_loop_add_timer(ts);
 }
