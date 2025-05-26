@@ -90,10 +90,10 @@ static size_t read_cdc(mpack_tree_t* tree, char* buf, size_t count) {
 
     uint32_t step = tud_cdc_read(buf, count);
 
-    tud_cdc_write(buf, step);
-    // printf("%.*s\n", step, buf);
+    // tud_cdc_write(buf, step);
+    //  printf("%.*s\n", step, buf);
 
-    tud_cdc_write_flush();
+    // tud_cdc_write_flush();
 
     return step;
 }
@@ -105,7 +105,14 @@ void cdc_task(__unused void* param) {
     mpack_tree_t tree;
     mpack_tree_init_stream(&tree, read_cdc, NULL, MAX_SIZE, MAX_NODES);
 
+    command_t cmd;
+
     while (true) {
+        if (xQueueReceive(usb_command_queue, &cmd, 0) != errQUEUE_EMPTY) {
+            tud_cdc_write(cmd.data, cmd.length);
+            tud_cdc_write_flush();
+        }
+
         if (!mpack_tree_try_parse(&tree)) {
             if (mpack_tree_error(&tree) != mpack_ok) break;
             continue;
@@ -116,7 +123,6 @@ void cdc_task(__unused void* param) {
 
         mpack_node_t node = mpack_tree_root(&tree);
 
-        bt_command_t bt_cmd;
         command_type exttype = mpack_node_exttype(node);
 
         uint32_t len = mpack_node_data_len(node);
@@ -124,16 +130,16 @@ void cdc_task(__unused void* param) {
 
         switch (exttype) {
             case CMD_BT_SEND_DATA:
-                bt_cmd.type = exttype;
-                memcpy(bt_cmd.data, data, len);
-                bt_cmd.length = len;
+                cmd.type = exttype;
+                memcpy(cmd.data, data, len);
+                cmd.length = len;
                 break;
 
             default:
                 break;
         }
 
-        xQueueSend(bt_command_queue, &bt_cmd, 1000);
+        xQueueSend(bt_command_queue, &cmd, 0);
 
         mpack_tree_destroy(&tree);
         mpack_tree_init_stream(&tree, read_cdc, NULL, MAX_SIZE, MAX_NODES);

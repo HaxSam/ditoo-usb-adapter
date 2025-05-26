@@ -12,6 +12,7 @@ target_link_libraries(${PROJECT_NAME}
 	pico_btstack_classic
     pico_btstack_cyw43
 	pico_cyw43_arch_none
+	mpack
 	commands
 	BTSTACK_PORT
 	FREERTOS_PORT

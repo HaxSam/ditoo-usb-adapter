@@ -13,6 +13,9 @@
 #include "pico/cyw43_arch.h"
 #include "pico/stdlib.h"
 
+// mpack
+#include "mpack/mpack.h"
+
 #define HEARTBEAT_PERIOD_MS 1000
 
 typedef enum {
@@ -30,7 +33,7 @@ static hci_con_handle_t connection_handle;
 static uint8_t rfcomm_server_channel;
 
 uint8_t data[] = {0x01, 0x04, 0x00, 0x74, 0x10, 0x88, 0x00, 0x02};
-static bt_command_t bt_cmd;
+static command_t bt_cmd;
 
 static state_t state = IDLE;
 static uint16_t rfcomm_cid = 0;
@@ -200,7 +203,31 @@ static void handle_query_rfcomm_event(uint8_t packet_type, uint16_t channel, uin
 }
 
 static void rfcomm_packet_handler(uint8_t *packet, uint16_t size) {
-    printf("Data recived (size: %d): '%.*s'\n", size, size, packet);
+    printf("BT: Data recived (size: %d): '", size);
+    for (int i = 0; i < size; ++i)
+        printf("%02x ", packet[i]);
+    printf("'\n");
+
+    command_t usb_cmd;
+
+    char *buf = malloc(size + 6);
+    mpack_writer_t writer;
+    mpack_writer_init(&writer, buf, size + 6);
+
+    mpack_write_ext(&writer, 0, packet, size);
+
+    size_t count = mpack_writer_buffer_used(&writer);
+
+    if (mpack_writer_destroy(&writer) != mpack_ok) {
+        printf("BT: Writing mpack faild\n");
+    }
+
+    usb_cmd.type = CMD_BT_SEND_DATA;
+    memcpy(usb_cmd.data, buf, count);
+    usb_cmd.length = count;
+
+    xQueueSend(usb_command_queue, &usb_cmd, 0);
+    free(buf);
 }
 
 static void heart_beat_handler(btstack_timer_source_t *ts) {
@@ -209,9 +236,6 @@ static void heart_beat_handler(btstack_timer_source_t *ts) {
 
     if (rfcomm_cid && state == SEND) {
         printf("CMD recived\n");
-        for (int i = 0; i < bt_cmd.length; ++i)
-            printf("%02x ", bt_cmd.data[i]);
-        printf("\n");
         rfcomm_request_can_send_now_event(rfcomm_cid);
     }
 
