@@ -105,11 +105,21 @@ void cdc_task(__unused void* param) {
     mpack_tree_t tree;
     mpack_tree_init_stream(&tree, read_cdc, NULL, MAX_SIZE, MAX_NODES);
 
-    command_t cmd;
+    static command_t usb_cmd;
 
     while (true) {
-        if (xQueueReceive(usb_command_queue, &cmd, 0) != errQUEUE_EMPTY) {
-            tud_cdc_write(cmd.data, cmd.length);
+        if (xQueueReceive(usb_command_queue, &usb_cmd, 0) != errQUEUE_EMPTY) {
+            if (usb_cmd.type != MPACK) {
+                char* buf;
+                size_t count = command_to_mpack(usb_cmd, &buf);
+
+                if (count != -1)
+                    mpack_in_command(buf, count, &usb_cmd);
+
+                free(buf);
+            }
+
+            tud_cdc_write(usb_cmd.data, usb_cmd.length);
             tud_cdc_write_flush();
         }
 
@@ -121,32 +131,22 @@ void cdc_task(__unused void* param) {
         if (mpack_tree_error(&tree) != mpack_ok)
             break;
 
+        command_t bt_cmd;
         mpack_node_t node = mpack_tree_root(&tree);
 
-        command_type exttype = mpack_node_exttype(node);
-
-        uint32_t len = mpack_node_data_len(node);
-        const char* data = mpack_node_data(node);
-
-        switch (exttype) {
-            case CMD_BT_SEND_DATA:
-                cmd.type = exttype;
-                memcpy(cmd.data, data, len);
-                cmd.length = len;
-                break;
-
-            default:
-                break;
+        if (mpack_to_command(&node, &bt_cmd)) {
+            printf("USB: command not supportet\n");
         }
 
-        xQueueSend(bt_command_queue, &cmd, 0);
+        xQueueSend(bt_command_queue, &bt_cmd, 0);
 
         mpack_tree_destroy(&tree);
         mpack_tree_init_stream(&tree, read_cdc, NULL, MAX_SIZE, MAX_NODES);
 
-        for (int i = 0; i < len; ++i)
-            printf("%02x ", data[i]);
-        printf("\n");
+        printf("USB: Data recived (size: %d): '", bt_cmd.length);
+        for (int i = 0; i < bt_cmd.length; ++i)
+            printf("%02x ", bt_cmd.data[i]);
+        printf("'\n");
     }
 }
 
