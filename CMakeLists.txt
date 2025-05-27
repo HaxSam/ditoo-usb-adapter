@@ -41,7 +41,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_subdirectory(src/usb-dev)
-add_subdirectory(src/bt-ditoo-stack)
+add_subdirectory(src/bt-client)
 add_subdirectory(src/commands)
 
 add_executable(${PROJECT_NAME} ${FILES})
@@ -50,7 +50,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
 	pico_stdlib
 	pico_cyw43_arch_none
 	usb-dev
-	bt-ditoo-stack
+	bt-client
 	commands
 	FREERTOS_PORT
 )

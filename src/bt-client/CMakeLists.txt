@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.12)
-project(bt-ditoo-stack C CXX ASM)
+project(bt-client C CXX ASM)
 
 file(GLOB FILES *.c *.h)
 
