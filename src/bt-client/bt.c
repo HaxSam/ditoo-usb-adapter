@@ -28,13 +28,15 @@ typedef enum {
     SEND
 } state_t;
 
+static bd_addr_t empty = {0, 0, 0, 0, 0, 0};
+
+static uint8_t known_severs = 0;
+static bd_addr_t *known_server_addrs;
 static char device_name[31];
 static bd_addr_t server_addr;
 static bd_addr_type_t server_addr_type;
-static hci_con_handle_t connection_handle;
 static uint8_t rfcomm_server_channel;
 
-uint8_t data[] = {0x01, 0x04, 0x00, 0x74, 0x10, 0x88, 0x00, 0x02};
 static command_t bt_cmd;
 
 static state_t state = IDLE;
@@ -91,6 +93,12 @@ void bt_client_task(void *param) {
 
 static void start_scan() {
     printf("Starting scanning!\n");
+    known_severs = 0;
+    if (known_server_addrs != NULL) {
+        free(known_server_addrs);
+        known_server_addrs = NULL;
+    }
+    known_server_addrs = malloc(sizeof(bd_addr_t) * 64);
     state = W4_SCAN_RESULTS;
     gap_set_scan_parameters(1, 0x0030, 0x0030);
     gap_start_scan();
@@ -130,7 +138,7 @@ static void hci_packet_handler(uint8_t *packet, uint16_t size) {
         case BTSTACK_EVENT_STATE:
             // BTstack activated, get started
             if (btstack_event_state_get_state(packet) != HCI_STATE_WORKING) return;
-            state = W4_SCAN;
+            if (state == IDLE) state = W4_SCAN;
             break;
 
         case GAP_EVENT_ADVERTISING_REPORT:
@@ -191,7 +199,6 @@ static void hci_packet_handler(uint8_t *packet, uint16_t size) {
         case RFCOMM_EVENT_CHANNEL_CLOSED:
             printf("RFCOMM channel closed\n");
             rfcomm_cid = 0;
-            btstack_run_loop_remove_timer(&heartbeat);
             break;
 
         default:
@@ -250,15 +257,24 @@ static void rfcomm_packet_handler(uint8_t *packet, uint16_t size) {
 
 static void bt_queue_handler() {
     if (xQueueReceive(bt_command_queue, &bt_cmd, 0) != errQUEUE_EMPTY) {
+        printf("BT CMD RECIVED: %d\n", bt_cmd.type);
         switch (bt_cmd.type) {
             case CMD_LIST_DEVICE:
                 if (state == W4_SCAN) start_scan();
                 break;
             case CMD_SELECT_DEVICE:
                 if (bt_cmd.length != BD_ADDR_LEN) break;
-                if (W4_SCAN_RESULTS) stop_scan();
-                memcpy(server_addr, bt_cmd.data, BD_ADDR_LEN);
+                if (state == W4_SCAN_RESULTS) stop_scan();
                 if (rfcomm_cid) rfcomm_disconnect(rfcomm_cid);
+
+                if (memcmp(bt_cmd.data, empty, BD_ADDR_LEN) == 0) {
+                    state = W4_SCAN;
+                    printf("Disconnected from %s\n", bd_addr_to_str(server_addr));
+                    break;
+                };
+
+                memcpy(server_addr, bt_cmd.data, BD_ADDR_LEN);
+
                 state = W4_SCAN_COMPLETE;
                 (void)sdp_client_register_query_callback(&handle_sdp_client_query_request);
 
@@ -317,14 +333,11 @@ static bool advertisement_report_contains_device_name(char *search_name, uint8_t
 }
 
 static bool is_server_addr_known(bd_addr_t addr) {
-    static uint8_t place = 0;
-    static bd_addr_t known_servers[64];
+    for (int i = 0; i < known_severs; ++i)
+        if (memcmp(known_server_addrs[i], addr, BD_ADDR_LEN) == 0) return true;
 
-    for (int i = 0; i < place; ++i)
-        if (memcmp(known_servers[i], addr, BD_ADDR_LEN) == 0) return true;
-
-    memcpy(known_servers[0], addr, BD_ADDR_LEN);
-    ++place;
+    memcpy(known_server_addrs[0], addr, BD_ADDR_LEN);
+    ++known_severs;
 
     return false;
 }
